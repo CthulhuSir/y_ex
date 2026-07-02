@@ -254,4 +254,11 @@ defmodule Yex.Nif do
 
   def normalize_number(_number),
     do: :erlang.nif_error(:nif_not_loaded)
+
+  def mem_debug_enable(_enabled), do: :erlang.nif_error(:nif_not_loaded)
+  def mem_debug_reset(), do: :erlang.nif_error(:nif_not_loaded)
+  def mem_debug_snapshot(), do: :erlang.nif_error(:nif_not_loaded)
+  def mem_debug_inspect_doc(_doc), do: :erlang.nif_error(:nif_not_loaded)
+  def mem_debug_log(_path, _phase, _extra_json), do: :erlang.nif_error(:nif_not_loaded)
+  def mem_debug_encode_update_size(_doc), do: :erlang.nif_error(:nif_not_loaded)
 end

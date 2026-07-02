@@ -40,8 +40,8 @@ defmodule Yex.MixProject do
 
   defp package do
     [
-      name: "y_ex_ebv",
-      maintainers: ["ebv"],
+      name: "y_ex_gsv",
+      maintainers: ["gsv"],
       licenses: ["MIT"],
       links: %{"Github" => @repo},
       files: [

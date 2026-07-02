@@ -150,6 +150,8 @@ defmodule Yex.Sync.SharedDoc do
 
   @impl true
   def handle_call({:unobserve, client}, _from, state) do
+    IO.inspect({:yex, :shared_doc, :unobserve, self()})
+
     state = do_remove_observer_process(client, state)
 
     {:reply, :ok, state, 0}
@@ -185,6 +187,8 @@ defmodule Yex.Sync.SharedDoc do
 
   @impl true
   def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
+    IO.inspect({:yex, :shared_doc, "OBSERVER DOWN", self()})
+
     state = do_remove_observer_process(pid, state)
 
     if state.assigns.auto_exit and state.assigns.observer_process === %{} do
@@ -280,6 +284,8 @@ defmodule Yex.Sync.SharedDoc do
 
   @impl true
   def terminate(_reason, %{assigns: assigns} = state) do
+    IO.inspect({:yex, :shared_doc, :doc_terminate, self()})
+
     if function_exported?(assigns.persistence, :unbind, 3) do
       state.assigns.persistence.unbind(assigns.persistence_state, assigns.doc_name, state.doc)
     end

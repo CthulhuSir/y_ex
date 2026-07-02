@@ -1,6 +1,7 @@
 use crate::atoms;
 use crate::doc::NifDoc;
 use crate::event::{NifMapEvent, NifSharedTypeDeepObservable, NifSharedTypeObservable};
+use crate::mem_debug;
 use crate::shared_type::NifSharedType;
 use crate::shared_type::SharedTypeId;
 use crate::transaction::TransactionResource;
@@ -51,6 +52,7 @@ fn map_set(
     key: &str,
     value: NifYInput,
 ) -> NifResult<Atom> {
+    mem_debug::record_map_set(&value);
     map.mutably(env, current_transaction, |txn| {
         let map = map.get_ref(txn)?;
         map.insert(txn, key, value);

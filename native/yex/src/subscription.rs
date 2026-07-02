@@ -23,6 +23,7 @@ pub struct NifSubscription {
 
 #[rustler::nif]
 fn sub_unsubscribe(env: Env<'_>, sub: NifSubscription) -> NifResult<Atom> {
+    crate::mem_debug::record(crate::mem_debug::Event::SubUnsubscribe);
     ENV.set(&mut env.clone(), || {
         let mut inner = match sub.reference.0.lock() {
             Ok(guard) => guard,

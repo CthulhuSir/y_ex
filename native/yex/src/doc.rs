@@ -14,6 +14,7 @@ use crate::event::NifSubdocsEvent;
 use crate::{
     atoms,
     error::Error,
+    mem_debug::{self, Event},
     subscription::NifSubscription,
     term_box::TermBox,
     transaction::{ReadTransaction, TransactionResource},
@@ -236,11 +237,13 @@ impl DocOperations for NifDoc {
 
 #[rustler::nif]
 fn doc_new() -> NifDoc {
+    mem_debug::record(Event::DocNew);
     NifDoc::default()
 }
 
 #[rustler::nif]
 fn doc_with_options(option: NifOptions) -> NifDoc {
+    mem_debug::record(Event::DocWithOptions);
     NifDoc::with_options(option)
 }
 
@@ -269,6 +272,7 @@ fn doc_begin_transaction(
     doc: NifDoc,
     origin: Term<'_>,
 ) -> NifResult<ResourceArc<TransactionResource>> {
+    mem_debug::record(Event::TransactionBegin);
     if let Some(origin) = term_to_origin_binary(origin) {
         let txn: TransactionMut =
             yrs::Transact::try_transact_mut_with(&doc.reference.0, origin.as_slice())
@@ -289,6 +293,7 @@ fn commit_transaction(env: Env<'_>, current_transaction: ResourceArc<Transaction
     ENV.set(&mut env.clone(), || {
         if let Ok(mut txn) = current_transaction.0.write() {
             *txn = None;
+            mem_debug::record(Event::TransactionCommit);
         }
     })
 }
@@ -299,6 +304,7 @@ fn doc_monitor_update_v1(
     pid: LocalPid,
     metadata: Term<'_>,
 ) -> NifResult<(Atom, NifSubscription)> {
+    mem_debug::record(Event::MonitorUpdateV1);
     let metadata = TermBox::new(metadata);
 
     doc.observe_update_v1(move |txn, event| {
@@ -332,6 +338,7 @@ fn doc_monitor_update_v2(
     pid: LocalPid,
     metadata: Term<'_>,
 ) -> NifResult<(Atom, NifSubscription)> {
+    mem_debug::record(Event::MonitorUpdateV2);
     let metadata = TermBox::new(metadata);
     doc.observe_update_v2(move |txn, event| {
         ENV.with(|env| {
@@ -366,6 +373,7 @@ fn apply_update_v1(
     current_transaction: Option<ResourceArc<TransactionResource>>,
     update: Binary,
 ) -> NifResult<Atom> {
+    mem_debug::record(Event::ApplyUpdate);
     let update = Update::decode_v1(update.as_slice()).map_err(Error::from)?;
 
     doc.mutably(env, current_transaction, |txn| {
@@ -412,6 +420,7 @@ fn encode_state_as_update_v1<'a>(
     current_transaction: Option<ResourceArc<TransactionResource>>,
     state_vector: Option<Binary>,
 ) -> NifResult<Term<'a>> {
+    mem_debug::record(Event::EncodeStateAsUpdate);
     let sv = if let Some(vector) = state_vector {
         StateVector::decode_v1(vector.as_slice()).map_err(Error::from)?
     } else {
@@ -457,6 +466,7 @@ fn doc_monitor_subdocs(
     pid: LocalPid,
     metadata: Term<'_>,
 ) -> NifResult<(Atom, NifSubscription)> {
+    mem_debug::record(Event::MonitorSubdocs);
     let metadata = TermBox::new(metadata);
     let worker_pid = doc.worker_pid;
     doc.observe_subdocs(move |txn, event: &SubdocsEvent| {
