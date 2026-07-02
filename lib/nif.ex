@@ -15,7 +15,7 @@ defmodule Yex.Nif do
       [
         otp_app: :y_ex,
         crate: "yex",
-        base_url: "https://github.com/EvgeniyBV/y_ex/releases/download/v#{version}",
+        base_url: "https://github.com/CthulhuSir/y_ex/releases/download/v#{version}",
         version: version
       ] ++ force_build
 
