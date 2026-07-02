@@ -2,7 +2,7 @@ defmodule Yex.MixProject do
   use Mix.Project
 
   @version "0.10.6"
-  @repo "https://github.com/EvgeniyBV/y_ex"
+  @repo "https://github.com/CthulhuSir/y_ex"
 
   @description """
   Elixir wrapper for Yjs

@@ -11,9 +11,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use rustler::{Atom, Encoder, Env, NifResult, NifStruct, Term};
 use serde::Serialize;
 use yrs::updates::encoder::Encode;
-use yrs::Transact;
+use yrs::ReadTxn;
 
-use crate::doc::{DocOperations, NifDoc};
+use crate::doc::NifDoc;
 use crate::yinput::NifYInput;
 use crate::{atoms, wrap::SliceIntoBinary};
 
@@ -213,6 +213,7 @@ fn mem_debug_inspect_doc(doc: NifDoc) -> NifResult<NifMemDebugDocInfo> {
 }
 
 #[rustler::nif]
+#[allow(unused_variables)]
 fn mem_debug_log<'a>(
     env: Env<'a>,
     path: String,
