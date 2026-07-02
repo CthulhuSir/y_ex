@@ -146,6 +146,12 @@ defmodule Yex.Doc do
     run_in_worker_process(doc, do: Yex.Nif.doc_offset_kind(doc))
   end
 
+  @doc "Run yrs garbage collection on deleted blocks in the document store."
+  @spec gc(t) :: :ok
+  def gc(%__MODULE__{} = doc) do
+    run_in_worker_process(doc, do: Yex.Nif.doc_gc(doc, cur_txn(doc)))
+  end
+
   @doc """
   Get or insert the text type.
   """

@@ -196,7 +196,7 @@ impl Prelim for NifYInput {
                 if txn.parent_doc().is_some() {
                     panic!("Cannot integrate the document, because it's already being used as a sub-document elsewhere");
                 }
-                (ItemContent::Doc(None, doc.reference.0.clone()), None)
+                (ItemContent::Doc(None, doc.reference.0.doc.clone()), None)
             }
         }
     }
@@ -228,8 +228,8 @@ impl Prelim for NifYInput {
             NifYInput::XmlFragmentPrelim(v) => v.integrate(txn, inner_ref),
             NifYInput::WeakPrelim(_) => {}
             NifYInput::Doc(doc) => {
-                let doc = doc.reference.0.clone();
-                doc.integrate(txn, inner_ref);
+                let inner_doc = doc.reference.0.doc.clone();
+                inner_doc.integrate(txn, inner_ref);
             }
         }
     }

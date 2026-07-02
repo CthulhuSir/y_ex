@@ -1,7 +1,7 @@
 use crate::atoms;
 use crate::doc::NifDoc;
 use crate::event::{NifMapEvent, NifSharedTypeDeepObservable, NifSharedTypeObservable};
-use crate::mem_debug;
+use crate::mem_debug::{self, Event};
 use crate::shared_type::NifSharedType;
 use crate::shared_type::SharedTypeId;
 use crate::transaction::TransactionResource;
@@ -170,5 +170,52 @@ fn map_link(
         let map = map.get_ref(txn)?;
         let weak = map.link(txn, key).map(|w| NifWeakPrelim::new(w.upcast()));
         Ok(weak)
+    })
+}
+
+#[rustler::nif]
+fn map_count_embedded_subdocs(
+    map: NifMap,
+    current_transaction: Option<ResourceArc<TransactionResource>>,
+) -> NifResult<u64> {
+    map.readonly(current_transaction, |txn| {
+        let map = map.get_ref(txn)?;
+        Ok(map
+            .iter(txn)
+            .filter(|(_, value)| matches!(value, Out::YDoc(_)))
+            .count() as u64)
+    })
+}
+
+#[rustler::nif]
+fn map_destroy_all_embedded_subdocs(
+    env: Env<'_>,
+    map: NifMap,
+    current_transaction: Option<ResourceArc<TransactionResource>>,
+) -> NifResult<u64> {
+    mem_debug::record(Event::MapDestroySubdocs);
+    let parent = map.doc().clone();
+    map.mutably(env, current_transaction, |txn| {
+        let map_ref = map.get_ref(txn)?;
+        let keys: Vec<String> = map_ref.keys(txn).map(String::from).collect();
+        let mut destroyed = 0u64;
+
+        for key in keys {
+            if let Some(Out::YDoc(subdoc)) = map_ref.get(txn, key.as_str()) {
+                let guid = subdoc.guid().to_string();
+                subdoc.destroy(txn);
+                parent.evict_subdoc_cache(&guid);
+                map_ref.insert(txn, key.as_str(), NifYInput::Any(Any::Null.into()));
+                destroyed += 1;
+            }
+        }
+
+        if destroyed > 0 {
+            txn.gc(None);
+            mem_debug::record(Event::DocGc);
+            parent.clear_subdoc_cache();
+        }
+
+        Ok(destroyed)
     })
 }

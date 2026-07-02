@@ -1,5 +1,6 @@
 // Standard library imports
-use std::ops::Deref;
+use std::collections::HashMap;
+use std::ops::{Deref, DerefMut};
 use std::sync::{Mutex, RwLock};
 
 // External crates
@@ -24,7 +25,72 @@ use crate::{
     NifArray, NifMap, NifText, ENV,
 };
 
-pub type DocResource = NifWrap<Doc>;
+/// Wraps a yrs [Doc] with a per-root cache of embedded subdoc [ResourceArc]s so
+/// repeated `map_get` of the same subdoc does not allocate a new NIF resource each time.
+pub struct DocHolder {
+    pub(crate) doc: Doc,
+    subdoc_cache: Mutex<HashMap<String, ResourceArc<DocResource>>>,
+}
+
+impl DocHolder {
+    pub fn new() -> Self {
+        Self {
+            doc: Doc::new(),
+            subdoc_cache: Mutex::new(HashMap::new()),
+        }
+    }
+
+    pub fn with_options(options: Options) -> Self {
+        Self {
+            doc: Doc::with_options(options),
+            subdoc_cache: Mutex::new(HashMap::new()),
+        }
+    }
+
+    pub fn from_doc(doc: Doc) -> Self {
+        Self {
+            doc,
+            subdoc_cache: Mutex::new(HashMap::new()),
+        }
+    }
+
+    pub fn cached_subdoc(&self, subdoc: Doc) -> ResourceArc<DocResource> {
+        let guid = subdoc.guid().to_string();
+        let mut cache = self.subdoc_cache.lock().unwrap();
+        cache
+            .entry(guid)
+            .or_insert_with(|| ResourceArc::new(DocHolder::from_doc(subdoc).into()))
+            .clone()
+    }
+
+    pub fn evict_subdoc(&self, guid: &str) {
+        if let Ok(mut cache) = self.subdoc_cache.lock() {
+            cache.remove(guid);
+        }
+    }
+
+    pub fn clear_subdoc_cache(&self) {
+        if let Ok(mut cache) = self.subdoc_cache.lock() {
+            cache.clear();
+        }
+    }
+}
+
+impl Deref for DocHolder {
+    type Target = Doc;
+
+    fn deref(&self) -> &Self::Target {
+        &self.doc
+    }
+}
+
+impl DerefMut for DocHolder {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.doc
+    }
+}
+
+pub type DocResource = NifWrap<DocHolder>;
 
 #[rustler::resource_impl]
 impl rustler::Resource for DocResource {}
@@ -114,7 +180,7 @@ pub(crate) struct NifDoc {
 impl Default for NifDoc {
     fn default() -> Self {
         NifDoc {
-            reference: ResourceArc::new(Doc::new().into()),
+            reference: ResourceArc::new(DocHolder::new().into()),
             worker_pid: None,
         }
     }
@@ -122,15 +188,32 @@ impl Default for NifDoc {
 impl NifDoc {
     pub fn with_options(option: NifOptions) -> Self {
         NifDoc {
-            reference: ResourceArc::new(Doc::with_options(option.into()).into()),
+            reference: ResourceArc::new(DocHolder::with_options(option.into()).into()),
             worker_pid: None,
         }
     }
     pub fn with_worker_pid(doc: Doc, worker_pid: Option<LocalPid>) -> Self {
         NifDoc {
-            reference: ResourceArc::new(doc.into()),
+            reference: ResourceArc::new(DocHolder::from_doc(doc).into()),
             worker_pid,
         }
+    }
+
+    /// Return a cached [NifDoc] for an embedded subdocument owned by this root doc.
+    pub fn subdoc_nif(&self, subdoc: Doc) -> NifDoc {
+        mem_debug::record(Event::YoutYdocWrap);
+        NifDoc {
+            reference: self.reference.0.cached_subdoc(subdoc),
+            worker_pid: self.worker_pid,
+        }
+    }
+
+    pub fn evict_subdoc_cache(&self, guid: &str) {
+        self.reference.0.evict_subdoc(guid);
+    }
+
+    pub fn clear_subdoc_cache(&self) {
+        self.reference.0.clear_subdoc_cache();
     }
 
     pub fn get_or_insert_text(&self, name: &str) -> NifText {
@@ -203,7 +286,7 @@ impl Deref for NifDoc {
     type Target = Doc;
 
     fn deref(&self) -> &Self::Target {
-        &self.reference.0
+        &self.reference.0.doc
     }
 }
 
@@ -222,7 +305,7 @@ impl DocOperations for NifDoc {
     where
         F: FnOnce(&Transaction) -> NifResult<T>,
     {
-        let txn = yrs::Transact::try_transact(&self.reference.0).map_err(Error::from)?;
+        let txn = yrs::Transact::try_transact(&self.reference.0.doc).map_err(Error::from)?;
         f(&txn)
     }
 
@@ -230,7 +313,7 @@ impl DocOperations for NifDoc {
     where
         F: FnOnce(&mut TransactionMut) -> NifResult<T>,
     {
-        let mut txn = yrs::Transact::try_transact_mut(&self.reference.0).map_err(Error::from)?;
+        let mut txn = yrs::Transact::try_transact_mut(&self.reference.0.doc).map_err(Error::from)?;
         f(&mut txn)
     }
 }
@@ -275,14 +358,14 @@ fn doc_begin_transaction(
     mem_debug::record(Event::TransactionBegin);
     if let Some(origin) = term_to_origin_binary(origin) {
         let txn: TransactionMut =
-            yrs::Transact::try_transact_mut_with(&doc.reference.0, origin.as_slice())
+            yrs::Transact::try_transact_mut_with(&doc.reference.0.doc, origin.as_slice())
                 .map_err(Error::from)?;
         let txn: TransactionMut<'static> = unsafe { std::mem::transmute(txn) };
 
         Ok(TransactionResource(RwLock::new(Some(txn))).into())
     } else {
         let txn: TransactionMut =
-            yrs::Transact::try_transact_mut(&doc.reference.0).map_err(Error::from)?;
+            yrs::Transact::try_transact_mut(&doc.reference.0.doc).map_err(Error::from)?;
         let txn: TransactionMut<'static> = unsafe { std::mem::transmute(txn) };
         Ok(TransactionResource(RwLock::new(Some(txn))).into())
     }
@@ -291,10 +374,26 @@ fn doc_begin_transaction(
 #[rustler::nif]
 fn commit_transaction(env: Env<'_>, current_transaction: ResourceArc<TransactionResource>) {
     ENV.set(&mut env.clone(), || {
-        if let Ok(mut txn) = current_transaction.0.write() {
-            *txn = None;
-            mem_debug::record(Event::TransactionCommit);
+        if let Ok(mut guard) = current_transaction.0.write() {
+            if let Some(mut txn) = guard.take() {
+                txn.gc(None);
+                mem_debug::record(Event::DocGc);
+                mem_debug::record(Event::TransactionCommit);
+            }
         }
+    })
+}
+
+#[rustler::nif]
+fn doc_gc(
+    env: Env<'_>,
+    doc: NifDoc,
+    current_transaction: Option<ResourceArc<TransactionResource>>,
+) -> NifResult<Atom> {
+    mem_debug::record(Event::DocGc);
+    doc.mutably(env, current_transaction, |txn| {
+        txn.gc(None);
+        Ok(atoms::ok())
     })
 }
 

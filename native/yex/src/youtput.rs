@@ -1,7 +1,6 @@
 use crate::{
     any::NifAny,
     doc::NifDoc,
-    mem_debug::{self, Event},
     xml::{NifXmlElement, NifXmlFragment, NifXmlText},
     NifArray, NifMap, NifText, NifUndefinedRef, NifWeakLink,
 };
@@ -33,8 +32,7 @@ impl NifYOut {
             yrs::Out::YXmlText(xml) => NifYOut::YXmlText(NifXmlText::new(doc, xml)),
             yrs::Out::YWeakLink(weak) => NifYOut::YWeakLink(NifWeakLink::new(doc, weak)),
             yrs::Out::YDoc(subdoc) => {
-                mem_debug::record(Event::YoutYdocWrap);
-                NifYOut::YDoc(NifDoc::with_worker_pid(subdoc, doc.worker_pid))
+                NifYOut::YDoc(doc.subdoc_nif(subdoc))
             }
             yrs::Out::UndefinedRef(_) => NifYOut::UndefinedRef(NifUndefinedRef { doc }),
         }

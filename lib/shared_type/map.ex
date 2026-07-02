@@ -325,6 +325,28 @@ defmodule Yex.Map do
     )
   end
 
+  @doc """
+  Count embedded Y.Doc values in a map without wrapping each subdoc for Elixir.
+  """
+  @spec count_embedded_subdocs(t) :: non_neg_integer()
+  def count_embedded_subdocs(%__MODULE__{doc: doc} = map) do
+    Doc.run_in_worker_process(doc,
+      do: Yex.Nif.map_count_embedded_subdocs(map, cur_txn(map))
+    )
+  end
+
+  @doc """
+  Destroy all embedded subdocuments in a map, tombstone keys, and run yrs GC.
+
+  Returns the number of subdocuments destroyed.
+  """
+  @spec destroy_all_embedded_subdocs(t) :: non_neg_integer()
+  def destroy_all_embedded_subdocs(%__MODULE__{doc: doc} = map) do
+    Doc.run_in_worker_process(doc,
+      do: Yex.Nif.map_destroy_all_embedded_subdocs(map, cur_txn(map))
+    )
+  end
+
   @doc false
   # Gets the current transaction reference from the process dictionary for the given document
   defp cur_txn(%{doc: %Yex.Doc{reference: doc_ref}}) do

@@ -17,7 +17,7 @@ use crate::doc::NifDoc;
 use crate::yinput::NifYInput;
 use crate::{atoms, wrap::SliceIntoBinary};
 
-const EVENT_COUNT: usize = 14;
+const EVENT_COUNT: usize = 16;
 
 #[derive(Clone, Copy, Debug)]
 #[repr(usize)]
@@ -36,11 +36,15 @@ pub enum Event {
     ApplyUpdate = 11,
     TransactionBegin = 12,
     TransactionCommit = 13,
+    MapDestroySubdocs = 14,
+    DocGc = 15,
 }
 
 static ENABLED: AtomicBool = AtomicBool::new(true);
 
 static COUNTERS: [AtomicU64; EVENT_COUNT] = [
+    AtomicU64::new(0),
+    AtomicU64::new(0),
     AtomicU64::new(0),
     AtomicU64::new(0),
     AtomicU64::new(0),
@@ -91,6 +95,8 @@ fn snapshot_pairs() -> Vec<(String, u64)> {
         "apply_update",
         "transaction_begin",
         "transaction_commit",
+        "map_destroy_subdocs",
+        "doc_gc",
     ];
 
     names
@@ -118,6 +124,8 @@ pub struct NifMemDebugSnapshot {
     pub apply_update: u64,
     pub transaction_begin: u64,
     pub transaction_commit: u64,
+    pub map_destroy_subdocs: u64,
+    pub doc_gc: u64,
     /// `map_set_doc - sub_unsubscribe` is not meaningful; use `map_set_doc - map_set_null`
     /// during unload to see net subdoc integrations vs clears.
     pub net_subdoc_integrations: i64,
@@ -140,6 +148,9 @@ impl NifMemDebugSnapshot {
         let apply_update = COUNTERS[Event::ApplyUpdate as usize].load(Ordering::Relaxed);
         let transaction_begin = COUNTERS[Event::TransactionBegin as usize].load(Ordering::Relaxed);
         let transaction_commit = COUNTERS[Event::TransactionCommit as usize].load(Ordering::Relaxed);
+        let map_destroy_subdocs =
+            COUNTERS[Event::MapDestroySubdocs as usize].load(Ordering::Relaxed);
+        let doc_gc = COUNTERS[Event::DocGc as usize].load(Ordering::Relaxed);
 
         NifMemDebugSnapshot {
             enabled: ENABLED.load(Ordering::Relaxed),
@@ -157,6 +168,8 @@ impl NifMemDebugSnapshot {
             apply_update,
             transaction_begin,
             transaction_commit,
+            map_destroy_subdocs,
+            doc_gc,
             net_subdoc_integrations: map_set_doc as i64 - map_set_null as i64,
         }
     }
@@ -245,6 +258,8 @@ fn mem_debug_log<'a>(
             "apply_update": snapshot.apply_update,
             "transaction_begin": snapshot.transaction_begin,
             "transaction_commit": snapshot.transaction_commit,
+            "map_destroy_subdocs": snapshot.map_destroy_subdocs,
+            "doc_gc": snapshot.doc_gc,
             "net_subdoc_integrations": snapshot.net_subdoc_integrations,
         }
     });
